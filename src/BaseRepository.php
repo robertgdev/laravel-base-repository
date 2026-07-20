@@ -1,0 +1,249 @@
+<?php
+
+declare(strict_types=1);
+
+namespace RobertGDev\BaseRepository;
+
+use Closure;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\LazyCollection;
+
+/**
+ * A lightweight base repository that wraps Eloquent model operations
+ * without Criteria overhead. Extend this class and provide your model
+ * in the constructor to get full CRUD and query support out of the box.
+ *
+ * ```php
+ * class UserRepository extends BaseRepository
+ * {
+ *     public function __construct(User $model)
+ *     {
+ *         parent::__construct($model);
+ *     }
+ *
+ *     public function model(): string
+ *     {
+ *         return User::class;
+ *     }
+ *
+ *     public function findActiveByEmail(string $email): ?User
+ *     {
+ *         return $this->query()->where('active', true)->where('email', $email)->first();
+ *     }
+ * }
+ * ```
+ *
+ * @template TModel of Model
+ *
+ * @implements BaseRepositoryInterface<TModel>
+ */
+abstract class BaseRepository implements BaseRepositoryInterface
+{
+    /**
+     * @param  TModel  $model
+     */
+    public function __construct(
+        protected readonly Model $model,
+    ) {}
+
+    abstract public function model(): string;
+
+    public function find(int|string $id): ?Model
+    {
+        return $this->newQuery()->find($id);
+    }
+
+    public function findOrFail(int|string $id): Model
+    {
+        /** @var TModel|null $result */
+        $result = $this->newQuery()->find($id);
+
+        if ($result === null) {
+            throw (new ModelNotFoundException)->setModel($this->model::class, $id);
+        }
+
+        return $result;
+    }
+
+    public function findOr(int|string $id, Closure $callback): mixed
+    {
+        return $this->newQuery()->find($id) ?? $callback($id);
+    }
+
+    public function findOrNew(int|string $id): Model
+    {
+        return $this->newQuery()->find($id) ?? $this->newModelInstance([]);
+    }
+
+    public function findMany(array $ids): Collection
+    {
+        return $this->newQuery()->findMany($ids);
+    }
+
+    public function first(array $columns = ['*']): ?Model
+    {
+        return $this->newQuery()->first($columns);
+    }
+
+    public function firstOrFail(array $columns = ['*']): Model
+    {
+        return $this->newQuery()->firstOrFail($columns);
+    }
+
+    public function firstOr(array $columns, Closure $callback): mixed
+    {
+        /** @var TModel|null $result */
+        $result = $this->newQuery()->first($columns);
+
+        return $result ?? $callback();
+    }
+
+    public function firstOrCreate(array $attributes, array $values = []): Model
+    {
+        return $this->newQuery()->firstOrCreate($attributes, $values);
+    }
+
+    public function firstOrNew(array $attributes, array $values = []): Model
+    {
+        return $this->newQuery()->firstOrNew($attributes, $values);
+    }
+
+    public function all(array $columns = ['*']): Collection
+    {
+        return $this->newQuery()->get($columns);
+    }
+
+    public function get(array $columns = ['*']): Collection
+    {
+        return $this->newQuery()->get($columns);
+    }
+
+    public function count(array $where = []): int
+    {
+        if (empty($where)) {
+            return $this->newQuery()->count();
+        }
+
+        return $this->newQuery()->where($where)->count();
+    }
+
+    public function exists(array $where): bool
+    {
+        return $this->newQuery()->where($where)->exists();
+    }
+
+    public function doesntExist(array $where): bool
+    {
+        return $this->newQuery()->where($where)->doesntExist();
+    }
+
+    public function paginate(
+        ?int $perPage = null,
+        array $columns = ['*'],
+        string $pageName = 'page',
+        ?int $page = null,
+    ): LengthAwarePaginator {
+        $perPage ??= $this->model->getPerPage();
+
+        return $this->newQuery()->paginate($perPage, $columns, $pageName, $page);
+    }
+
+    public function chunk(int $count, callable $callback): bool
+    {
+        return $this->newQuery()->chunk($count, $callback);
+    }
+
+    public function lazy(int $chunkSize = 1000): LazyCollection
+    {
+        return $this->newQuery()->lazy($chunkSize);
+    }
+
+    public function create(array $attributes): Model
+    {
+        return $this->newQuery()->create($attributes);
+    }
+
+    public function make(array $attributes): Model
+    {
+        return $this->newModelInstance($attributes);
+    }
+
+    public function update(int|string $id, array $attributes): ?Model
+    {
+        $model = $this->newQuery()->find($id);
+
+        if ($model === null) {
+            return null;
+        }
+
+        $model->update($attributes);
+
+        return $model;
+    }
+
+    public function updateOrCreate(array $attributes, array $values = []): Model
+    {
+        return $this->newQuery()->updateOrCreate($attributes, $values);
+    }
+
+    public function delete(int|string $id): bool
+    {
+        $model = $this->newQuery()->find($id);
+
+        return $model !== null && $model->delete() !== false;
+    }
+
+    public function forceDelete(int|string $id): bool
+    {
+        $model = $this->newQuery()->find($id);
+
+        return $model !== null && $model->forceDelete() !== false;
+    }
+
+    public function restore(int|string $id): bool
+    {
+        if (! method_exists($this->model, 'withTrashed')) {
+            return false;
+        }
+
+        $model = $this->model->withTrashed()->find($id);
+
+        if ($model === null) {
+            return false;
+        }
+
+        return $model->restore() !== false;
+    }
+
+    /**
+     * @return Builder<TModel>
+     */
+    public function query(): Builder
+    {
+        return $this->newQuery();
+    }
+
+    /**
+     * @return Builder<TModel>
+     */
+    private function newQuery(): Builder
+    {
+        return $this->model->newQuery();
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @return TModel
+     */
+    private function newModelInstance(array $attributes): Model
+    {
+        /** @var TModel $instance */
+        $instance = $this->model->newInstance($attributes);
+
+        return $instance;
+    }
+}

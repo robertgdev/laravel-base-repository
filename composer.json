@@ -1,0 +1,47 @@
+{
+    "name": "robertgdev/base-repository",
+    "description": "A lightweight base repository for Laravel Eloquent models with full CRUD and query support, no Criteria overhead.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "laravel",
+        "eloquent",
+        "repository",
+        "repository-pattern",
+        "base-repository"
+    ],
+    "authors": [
+        {
+            "name": "Robert Gdev",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "illuminate/database": ">=13.0",
+        "illuminate/pagination": ">=13.0",
+        "illuminate/support": ">=13.0"
+    },
+    "require-dev": {
+        "pestphp/pest": "^4.0",
+        "larastan/larastan": "^3.10",
+        "orchestra/testbench": "^11.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "RobertGDev\\BaseRepository\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "RobertGDev\\BaseRepository\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
