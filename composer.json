@@ -1,5 +1,5 @@
 {
-    "name": "robertgdev/base-repository",
+    "name": "robertgdev/laravel-base-repository",
     "description": "A lightweight base repository for Laravel Eloquent models with full CRUD and query support, no Criteria overhead.",
     "type": "library",
     "license": "MIT",
