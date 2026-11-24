@@ -161,9 +161,12 @@ abstract class BaseRepository implements BaseRepositoryInterface
         string $pageName = 'page',
         ?int $page = null,
     ): LengthAwarePaginator {
-        $perPage ??= $this->model->getPerPage();
-
-        return $this->newQuery()->paginate($perPage, $columns, $pageName, $page);
+        return $this->newQuery()->paginate(
+            $this->resolvePerPage($perPage),
+            $columns,
+            $pageName,
+            $page,
+        );
     }
 
     /**
@@ -299,6 +302,17 @@ abstract class BaseRepository implements BaseRepositoryInterface
         }
 
         return $query;
+    }
+
+    /**
+     * Never trust a caller-supplied page size: null, zero and negative
+     * values all fall back to the model's own per-page setting.
+     */
+    private function resolvePerPage(?int $perPage): int
+    {
+        return $perPage !== null && $perPage > 0
+            ? $perPage
+            : $this->model->getPerPage();
     }
 
     /**
