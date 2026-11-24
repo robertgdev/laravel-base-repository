@@ -18,10 +18,28 @@ use Illuminate\Support\LazyCollection;
 use RobertGDev\BaseRepository\Exceptions\ModelNotSavedException;
 
 /**
+ * Contract for a base repository bound to a single Eloquent model.
+ *
+ * Reads honour global scopes. `create()`, `update()`, `firstOrCreate()`
+ * and `updateOrCreate()` go through the model — firing events and
+ * applying casts — and throw ModelNotSavedException rather than
+ * pretending a refused write succeeded. The bulk helpers (`insert*`,
+ * `upsert`, `updateWhere`, `deleteWhere`) are single statements that
+ * bypass events and casts.
+ *
  * @template TModel of Model
  */
 interface BaseRepositoryInterface
 {
+    /**
+     * @return class-string<TModel>
+     */
+    public function model(): string;
+
+    // -----------------------------------------------------------------
+    // Retrieval
+    // -----------------------------------------------------------------
+
     /**
      * @return TModel|null
      */
@@ -42,9 +60,6 @@ interface BaseRepositoryInterface
      */
     public function findOr(int|string $id, Closure $callback): mixed;
 
-    /**
-     * @return TModel
-     */
     /**
      * @param  array<int, string>|string  $columns
      * @return TModel
@@ -73,21 +88,11 @@ interface BaseRepositoryInterface
     public function findManyOrFail(array $ids): Collection;
 
     /**
-     * @param  array<int, string>  $columns
-     * @return TModel|null
-     */
-    /**
      * @param  array<int, string>|string  $columns
      * @return TModel|null
      */
     public function first(array|string $columns = ['*']): ?Model;
 
-    /**
-     * @param  array<int, string>  $columns
-     * @return TModel
-     *
-     * @throws ModelNotFoundException
-     */
     /**
      * @param  array<int, string>|string  $columns
      * @return TModel
@@ -97,9 +102,9 @@ interface BaseRepositoryInterface
     public function firstOrFail(array|string $columns = ['*']): Model;
 
     /**
-     * @param  array<int, string>  $columns
-     */
-    /**
+     * Return the first row, or the result of $callback when the set is
+     * empty.
+     *
      * @param  Closure(): mixed  $callback
      * @param  array<int, string>|string  $columns
      */
@@ -112,65 +117,10 @@ interface BaseRepositoryInterface
     public function firstWhere(array|string $column, mixed $operator = null, mixed $value = null): ?Model;
 
     /**
-     * @param  array<string, mixed>  $attributes
-     * @param  array<string, mixed>  $values
-     * @return TModel
-     *
-     * @throws ModelNotSavedException
-     */
-    public function firstOrCreate(array $attributes, array $values = []): Model;
-
-    /**
-     * @param  array<string, mixed>  $attributes
-     * @param  array<string, mixed>  $values
-     * @return TModel
-     */
-    public function firstOrNew(array $attributes, array $values = []): Model;
-
-    /**
-     * @param  array<int, string>  $columns
-     * @return Collection<int, TModel>
-     */
-    /**
      * @param  array<int, string>  $columns
      * @return Collection<int, TModel>
      */
     public function get(array $columns = ['*']): Collection;
-
-    /**
-     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
-     */
-    /**
-     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
-     */
-    public function count(Closure|array $where = [], string $columns = '*'): int;
-
-    /**
-     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
-     */
-    public function exists(Closure|array $where = []): bool;
-
-    /**
-     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
-     */
-    public function doesntExist(Closure|array $where = []): bool;
-
-    public function existsById(int|string $id): bool;
-
-    /**
-     * @return SupportCollection<array-key, mixed>
-     */
-    public function pluck(string $column, ?string $key = null): SupportCollection;
-
-    public function value(string $column): mixed;
-
-    public function sum(string $column): int|float;
-
-    public function avg(string $column): ?float;
-
-    public function max(string $column): mixed;
-
-    public function min(string $column): mixed;
 
     /**
      * @param  array<int, string>  $columns
@@ -206,14 +156,58 @@ interface BaseRepositoryInterface
     ): CursorPaginator;
 
     /**
+     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
+     */
+    public function count(Closure|array $where = [], string $columns = '*'): int;
+
+    /**
+     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
+     */
+    public function exists(Closure|array $where = []): bool;
+
+    /**
+     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
+     */
+    public function doesntExist(Closure|array $where = []): bool;
+
+    public function existsById(int|string $id): bool;
+
+    // -----------------------------------------------------------------
+    // Aggregates and scalar reads
+    // -----------------------------------------------------------------
+
+    /**
+     * @return SupportCollection<array-key, mixed>
+     */
+    public function pluck(string $column, ?string $key = null): SupportCollection;
+
+    public function value(string $column): mixed;
+
+    public function sum(string $column): int|float;
+
+    public function avg(string $column): ?float;
+
+    public function max(string $column): mixed;
+
+    public function min(string $column): mixed;
+
+    // -----------------------------------------------------------------
+    // Iteration
+    // -----------------------------------------------------------------
+
+    /**
      * Offset based chunking — do not mutate the driving columns in the
      * callback, use chunkById() instead.
+     *
+     * The callback receives the chunk and the page number.
      *
      * @param  callable  $callback
      */
     public function chunk(int $count, callable $callback): bool;
 
     /**
+     * The callback receives the chunk and the page number.
+     *
      * @param  callable  $callback
      */
     public function chunkById(int $count, callable $callback, ?string $column = null, ?string $alias = null): bool;
@@ -232,6 +226,10 @@ interface BaseRepositoryInterface
      * @return LazyCollection<int, TModel>
      */
     public function cursor(): LazyCollection;
+
+    // -----------------------------------------------------------------
+    // Model writes (events, casts, observers)
+    // -----------------------------------------------------------------
 
     /**
      * @param  array<string, mixed>  $attributes
@@ -262,7 +260,27 @@ interface BaseRepositoryInterface
      *
      * @throws ModelNotSavedException
      */
+    public function firstOrCreate(array $attributes, array $values = []): Model;
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  array<string, mixed>  $values
+     * @return TModel
+     */
+    public function firstOrNew(array $attributes, array $values = []): Model;
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  array<string, mixed>  $values
+     * @return TModel
+     *
+     * @throws ModelNotSavedException
+     */
     public function updateOrCreate(array $attributes, array $values = []): Model;
+
+    // -----------------------------------------------------------------
+    // Bulk writes (single statements: no events, no casts)
+    // -----------------------------------------------------------------
 
     /**
      * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
@@ -301,6 +319,10 @@ interface BaseRepositoryInterface
      */
     public function updateOrInsert(Closure|array $attributes, array $values = []): bool;
 
+    // -----------------------------------------------------------------
+    // Deletes
+    // -----------------------------------------------------------------
+
     /**
      * @return bool|null null when the row does not exist; false when a
      *                   deleting listener vetoed the delete; true when
@@ -327,6 +349,10 @@ interface BaseRepositoryInterface
      */
     public function deleteMany(array $ids): int;
 
+    // -----------------------------------------------------------------
+    // Soft deletes
+    // -----------------------------------------------------------------
+
     /**
      * @return bool|null null when the row does not exist or the model is
      *                   not soft-deletable; false when a restoring
@@ -351,6 +377,10 @@ interface BaseRepositoryInterface
      * @return Builder<TModel>
      */
     public function onlyTrashed(): Builder;
+
+    // -----------------------------------------------------------------
+    // Utility
+    // -----------------------------------------------------------------
 
     /**
      * @return TModel
@@ -385,9 +415,4 @@ interface BaseRepositoryInterface
      * @return Builder<TModel>
      */
     public function query(): Builder;
-
-    /**
-     * @return class-string<TModel>
-     */
-    public function model(): string;
 }

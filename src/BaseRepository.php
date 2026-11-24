@@ -21,28 +21,41 @@ use RobertGDev\BaseRepository\Exceptions\ModelNotSavedException;
 
 /**
  * A lightweight base repository that wraps Eloquent model operations
- * without Criteria overhead. Extend this class and provide your model
- * in the constructor to get full CRUD and query support out of the box.
+ * without Criteria overhead.
+ *
+ * The model class is declared once, in model(). Subclasses may declare a
+ * constructor that forwards a model instance to the parent — the classic
+ * injection style — but it is optional: without one, the base class builds
+ * the instance itself, so `app(OrderRepository::class)` resolves with no
+ * boilerplate.
  *
  * ```php
- * class UserRepository extends BaseRepository
+ * /**
+ *  * @extends BaseRepository<Order>
+ *  *\/
+ * class OrderRepository extends BaseRepository
  * {
- *     public function __construct(User $model)
- *     {
- *         parent::__construct($model);
- *     }
- *
  *     public function model(): string
  *     {
- *         return User::class;
+ *         return Order::class;
  *     }
  *
- *     public function findActiveByEmail(string $email): ?User
+ *     public function findPendingForUser(int $userId): Collection
  *     {
- *         return $this->query()->where('active', true)->where('email', $email)->first();
+ *         return $this->query()
+ *             ->where('user_id', $userId)
+ *             ->where('status', 'pending')
+ *             ->get();
  *     }
  * }
  * ```
+ *
+ * Reads honour global scopes. Writes split in two families:
+ * `create()`, `update()`, `updateOrCreate()` and `firstOrCreate()` go
+ * through the model, firing events and applying casts, and throw
+ * ModelNotSavedException when Eloquent refuses the write; the bulk
+ * helpers (`insert*`, `upsert`, `updateWhere`, `deleteWhere`) are single
+ * statements that bypass events and casts.
  *
  * @template TModel of Model
  *
@@ -74,29 +87,23 @@ abstract class BaseRepository implements BaseRepositoryInterface
      */
     abstract public function model(): string;
 
+    // -----------------------------------------------------------------
+    // Retrieval
+    // -----------------------------------------------------------------
+
     public function find(int|string $id): ?Model
     {
         return $this->newQuery()->find($id);
     }
 
+    /**
+     * @throws ModelNotFoundException
+     */
     public function findOrFail(int|string $id): Model
     {
-        /** @var TModel|null $result */
-        $result = $this->newQuery()->find($id);
-
-        if ($result === null) {
-            throw (new ModelNotFoundException)->setModel($this->model::class, $id);
-        }
-
-        return $result;
+        return $this->newQuery()->findOrFail($id);
     }
 
-    /**
-     * Invoke $callback (with no arguments, matching Eloquent) when the
-     * row does not exist.
-     *
-     * @param  Closure(): mixed  $callback
-     */
     public function findOr(int|string $id, Closure $callback): mixed
     {
         return $this->newQuery()->find($id) ?? $callback();
@@ -118,9 +125,15 @@ abstract class BaseRepository implements BaseRepositoryInterface
         return $this->withTrashed()->find($id);
     }
 
+    /**
+     * @param  array<int, int|string>  $ids
+     */
     public function findMany(array $ids): Collection
     {
-        return $this->newQuery()->findMany($ids);
+        /** @var Collection<int, TModel> $models */
+        $models = $this->newQuery()->findMany($ids);
+
+        return $models;
     }
 
     /**
@@ -130,6 +143,7 @@ abstract class BaseRepository implements BaseRepositoryInterface
      */
     public function findManyOrFail(array $ids): Collection
     {
+        /** @var Collection<int, TModel> $models */
         $models = $this->newQuery()->findMany($ids);
 
         /** @var array<int, int|string> $unique */
@@ -152,6 +166,8 @@ abstract class BaseRepository implements BaseRepositoryInterface
 
     /**
      * @param  array<int, string>|string  $columns
+     *
+     * @throws ModelNotFoundException
      */
     public function firstOrFail(array|string $columns = ['*']): Model
     {
@@ -159,10 +175,8 @@ abstract class BaseRepository implements BaseRepositoryInterface
     }
 
     /**
-     * Return the first row, or the result of $callback when the set is
-     * empty.
+     * Return the first row, or the result of $callback when the set is empty.
      *
-     * @param  Closure(): mixed  $callback
      * @param  array<int, string>|string  $columns
      */
     public function firstOr(Closure $callback, array|string $columns = ['*']): mixed
@@ -185,94 +199,20 @@ abstract class BaseRepository implements BaseRepositoryInterface
         return $this->newQuery()->firstWhere($column, $operator, $value);
     }
 
-    public function firstOrCreate(array $attributes, array $values = []): Model
-    {
-        $model = $this->newQuery()->firstOrCreate($attributes, $values);
-
-        if (! $model->exists) {
-            throw ModelNotSavedException::for($model, 'create');
-        }
-
-        return $model;
-    }
-
-    public function firstOrNew(array $attributes, array $values = []): Model
-    {
-        return $this->newQuery()->firstOrNew($attributes, $values);
-    }
-
+    /**
+     * @param  array<int, string>  $columns
+     */
     public function get(array $columns = ['*']): Collection
     {
-        return $this->newQuery()->get($columns);
+        /** @var Collection<int, TModel> $models */
+        $models = $this->newQuery()->get($columns);
+
+        return $models;
     }
 
     /**
-     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
+     * @param  array<int, string>  $columns
      */
-    /**
-     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
-     */
-    public function count(Closure|array $where = [], string $columns = '*'): int
-    {
-        return $this->applyWhere($this->newQuery(), $where)->count($columns);
-    }
-
-    /**
-     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
-     */
-    public function exists(Closure|array $where = []): bool
-    {
-        return $this->applyWhere($this->newQuery(), $where)->exists();
-    }
-
-    /**
-     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
-     */
-    public function doesntExist(Closure|array $where = []): bool
-    {
-        return ! $this->exists($where);
-    }
-
-    public function existsById(int|string $id): bool
-    {
-        return $this->newQuery()->whereKey($id)->exists();
-    }
-
-    /**
-     * @return SupportCollection<array-key, mixed>
-     */
-    public function pluck(string $column, ?string $key = null): SupportCollection
-    {
-        return $this->newQuery()->pluck($column, $key);
-    }
-
-    public function value(string $column): mixed
-    {
-        return $this->newQuery()->value($column);
-    }
-
-    public function sum(string $column): int|float
-    {
-        return $this->toNumber($this->newQuery()->sum($column));
-    }
-
-    public function avg(string $column): ?float
-    {
-        $value = $this->newQuery()->avg($column);
-
-        return $value === null ? null : (float) $value;
-    }
-
-    public function max(string $column): mixed
-    {
-        return $this->newQuery()->max($column);
-    }
-
-    public function min(string $column): mixed
-    {
-        return $this->newQuery()->min($column);
-    }
-
     public function paginate(
         ?int $perPage = null,
         array $columns = ['*'],
@@ -322,10 +262,84 @@ abstract class BaseRepository implements BaseRepositoryInterface
     }
 
     /**
+     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
+     */
+    public function count(Closure|array $where = [], string $columns = '*'): int
+    {
+        return (int) $this->applyWhere($this->newQuery(), $where)->count($columns);
+    }
+
+    /**
+     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
+     */
+    public function exists(Closure|array $where = []): bool
+    {
+        return $this->applyWhere($this->newQuery(), $where)->exists();
+    }
+
+    /**
+     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
+     */
+    public function doesntExist(Closure|array $where = []): bool
+    {
+        return ! $this->exists($where);
+    }
+
+    public function existsById(int|string $id): bool
+    {
+        return $this->newQuery()->whereKey($id)->exists();
+    }
+
+    // -----------------------------------------------------------------
+    // Aggregate and scalar reads
+    // -----------------------------------------------------------------
+
+    /**
+     * @return SupportCollection<array-key, mixed>
+     */
+    public function pluck(string $column, ?string $key = null): SupportCollection
+    {
+        return $this->newQuery()->pluck($column, $key);
+    }
+
+    public function value(string $column): mixed
+    {
+        return $this->newQuery()->value($column);
+    }
+
+    public function sum(string $column): int|float
+    {
+        return $this->toNumber($this->newQuery()->sum($column));
+    }
+
+    public function avg(string $column): ?float
+    {
+        $value = $this->newQuery()->avg($column);
+
+        return $value === null ? null : (float) $value;
+    }
+
+    public function max(string $column): mixed
+    {
+        return $this->newQuery()->max($column);
+    }
+
+    public function min(string $column): mixed
+    {
+        return $this->newQuery()->min($column);
+    }
+
+    // -----------------------------------------------------------------
+    // Iteration
+    // -----------------------------------------------------------------
+
+    /**
      * Offset based chunking. Never mutate the columns that drive the
      * result set (or its ordering) inside the callback: the next page is
      * read by offset, so rows would be skipped. Use chunkById() or
      * lazyById() when the callback writes.
+     *
+     * The callback receives the chunk and the page number.
      *
      * @param  callable  $callback
      */
@@ -337,6 +351,8 @@ abstract class BaseRepository implements BaseRepositoryInterface
     /**
      * Keyset based chunking — safe when the callback mutates the rows.
      *
+     * The callback receives the chunk and the page number.
+     *
      * @param  callable  $callback
      */
     public function chunkById(int $count, callable $callback, ?string $column = null, ?string $alias = null): bool
@@ -344,6 +360,9 @@ abstract class BaseRepository implements BaseRepositoryInterface
         return $this->newQuery()->chunkById($count, $callback, $column, $alias);
     }
 
+    /**
+     * @return LazyCollection<int, TModel>
+     */
     public function lazy(int $chunkSize = 1000): LazyCollection
     {
         return $this->newQuery()->lazy($chunkSize);
@@ -365,16 +384,36 @@ abstract class BaseRepository implements BaseRepositoryInterface
         return $this->newQuery()->cursor();
     }
 
+    // -----------------------------------------------------------------
+    // Writes that go through the model (events, casts, observers)
+    // -----------------------------------------------------------------
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     *
+     * @throws ModelNotSavedException
+     */
     public function create(array $attributes): Model
     {
         return $this->saveOrFail($this->newModelInstance($attributes), 'create');
     }
 
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
     public function make(array $attributes): Model
     {
         return $this->newModelInstance($attributes);
     }
 
+    /**
+     * Update a row by primary key. Returns null when the row does not
+     * exist; throws when the row exists but Eloquent refused the write.
+     *
+     * @param  array<string, mixed>  $attributes
+     *
+     * @throws ModelNotSavedException
+     */
     public function update(int|string $id, array $attributes): ?Model
     {
         $model = $this->newQuery()->find($id);
@@ -390,6 +429,38 @@ abstract class BaseRepository implements BaseRepositoryInterface
         return $model;
     }
 
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  array<string, mixed>  $values
+     *
+     * @throws ModelNotSavedException
+     */
+    public function firstOrCreate(array $attributes, array $values = []): Model
+    {
+        $model = $this->newQuery()->firstOrCreate($attributes, $values);
+
+        if (! $model->exists) {
+            throw ModelNotSavedException::for($model, 'create');
+        }
+
+        return $model;
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  array<string, mixed>  $values
+     */
+    public function firstOrNew(array $attributes, array $values = []): Model
+    {
+        return $this->newQuery()->firstOrNew($attributes, $values);
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  array<string, mixed>  $values
+     *
+     * @throws ModelNotSavedException
+     */
     public function updateOrCreate(array $attributes, array $values = []): Model
     {
         $model = $this->newQuery()->firstOrNew($attributes);
@@ -397,10 +468,15 @@ abstract class BaseRepository implements BaseRepositoryInterface
         return $this->saveOrFail($model->fill($values), 'save');
     }
 
+    // -----------------------------------------------------------------
+    // Bulk writes (single statements: no events, no casts)
+    // -----------------------------------------------------------------
+
     /**
-     * Update matching rows in a single query. Global scopes apply; model
-     * events, observers, casts and mutators do not. Prefer update()/
-     * updateOrCreate() when those matter.
+     * Update matching rows in a single query.
+     *
+     * Global scopes apply; model events, observers, casts and mutators do
+     * not. Prefer update()/updateOrCreate() when those matter.
      *
      * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
      * @param  array<string, mixed>  $values
@@ -445,11 +521,13 @@ abstract class BaseRepository implements BaseRepositoryInterface
 
     /**
      * Insert rows, updating the ones that already exist, in one
-     * statement. Timestamps are filled automatically, but model events,
-     * observers, casts and mutators are NOT applied — pass raw database
-     * values. $uniqueBy must be backed by a unique index (on engines
-     * whose conflict target is advisory, a missing index inserts
-     * duplicates instead of updating).
+     * statement.
+     *
+     * Timestamps are filled automatically, but model events, observers,
+     * casts and mutators are NOT applied — pass raw database values (so
+     * encode JSON/array columns yourself). $uniqueBy must be backed by a
+     * unique index: on engines whose conflict target is advisory (MySQL)
+     * a missing index means duplicates are inserted, not updated.
      *
      * @param  array<int, array<string, mixed>>  $values
      * @param  array<int, string>  $uniqueBy
@@ -464,9 +542,11 @@ abstract class BaseRepository implements BaseRepositoryInterface
     /**
      * Insert the row when it does not exist, otherwise update it — no
      * model events or casts. Global scopes apply, so a soft-deleted row
-     * is not resurrected; a fresh row is inserted instead. With an array
-     * matcher the inserted row contains $attributes merged with $values;
-     * with a closure matcher $values must be complete.
+     * is not resurrected; a fresh row is inserted instead.
+     *
+     * With an array matcher the inserted row contains $attributes merged
+     * with $values; with a closure matcher $values must be complete,
+     * since the conditions cannot be turned back into attributes.
      *
      * @param  Closure|array<string, mixed>  $attributes  Array values are treated as whereIn().
      * @param  array<string, mixed>  $values
@@ -481,10 +561,14 @@ abstract class BaseRepository implements BaseRepositoryInterface
             return true;
         }
 
-        $row = $attributes instanceof Closure ? $values : array_merge($attributes, $values);
+        $attributes = $attributes instanceof Closure ? $values : array_merge($attributes, $values);
 
-        return (bool) $this->newQuery()->insert($row);
+        return (bool) $this->newQuery()->insert($attributes);
     }
+
+    // -----------------------------------------------------------------
+    // Deletes
+    // -----------------------------------------------------------------
 
     /**
      * Delete a row by primary key.
@@ -525,8 +609,10 @@ abstract class BaseRepository implements BaseRepositoryInterface
 
     /**
      * Delete matching rows in a single query. Model events do not fire;
-     * soft-deletable models are still soft-deleted. An empty $where
-     * deletes every row (global scopes still apply) — guard the caller.
+     * soft-deletable models are still soft-deleted.
+     *
+     * An empty $where deletes every row (global scopes still apply) —
+     * guard the caller.
      *
      * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
      * @return int number of affected rows
@@ -545,6 +631,10 @@ abstract class BaseRepository implements BaseRepositoryInterface
         return $this->toInt($this->newQuery()->whereKey($ids)->delete());
     }
 
+    // -----------------------------------------------------------------
+    // Soft deletes
+    // -----------------------------------------------------------------
+
     /**
      * Restore a single soft-deleted row, firing the restoring/restored
      * model events.
@@ -556,9 +646,6 @@ abstract class BaseRepository implements BaseRepositoryInterface
      */
     public function restore(int|string $id): ?bool
     {
-        // withTrashed() is a builder macro registered by SoftDeletingScope,
-        // not a model method: method_exists() can never see it, so detect
-        // soft-deletability via the trait instead.
         if (! $this->usesSoftDeletes()) {
             return null;
         }
@@ -587,8 +674,7 @@ abstract class BaseRepository implements BaseRepositoryInterface
             return 0;
         }
 
-        return (int) $this->newQuery()
-            ->withoutGlobalScope(SoftDeletingScope::class)
+        return (int) $this->withTrashed()
             ->whereKey($ids)
             ->whereNotNull($column)
             ->update([$column => null]);
@@ -633,6 +719,10 @@ abstract class BaseRepository implements BaseRepositoryInterface
 
         return $this->withTrashed()->whereNotNull($column);
     }
+
+    // -----------------------------------------------------------------
+    // Utility
+    // -----------------------------------------------------------------
 
     /**
      * @return TModel
@@ -697,6 +787,9 @@ abstract class BaseRepository implements BaseRepositoryInterface
     }
 
     /**
+     * Escape hatch: a fresh builder for anything this class does not
+     * expose.
+     *
      * @return Builder<TModel>
      */
     public function query(): Builder
@@ -704,109 +797,24 @@ abstract class BaseRepository implements BaseRepositoryInterface
         return $this->newQuery();
     }
 
-    /**
-     * @param  Builder<TModel>  $query
-     * @param  Closure|array<string, mixed>  $where
-     * @return Builder<TModel>
-     */
-    private function applyWhere(Builder $query, Closure|array $where): Builder
-    {
-        if ($where instanceof Closure) {
-            return $query->where($where);
-        }
-
-        foreach ($where as $column => $value) {
-            if (is_array($value)) {
-                $query->whereIn((string) $column, $value);
-
-                continue;
-            }
-
-            $query->where((string) $column, '=', $value);
-        }
-
-        return $query;
-    }
-
-    /**
-     * Never trust a caller-supplied page size: null, zero and negative
-     * values all fall back to the model's own per-page setting.
-     */
-    private function resolvePerPage(?int $perPage): int
-    {
-        return $perPage !== null && $perPage > 0
-            ? $perPage
-            : $this->model->getPerPage();
-    }
+    // -----------------------------------------------------------------
+    // Internals
+    // -----------------------------------------------------------------
 
     /**
      * @return Builder<TModel>
      */
     private function newQuery(): Builder
     {
-        return $this->model->newQuery();
+        /** @var Builder<TModel> $query */
+        $query = $this->model->newQuery();
+
+        return $query;
     }
 
     /**
      * @return TModel
      */
-    /**
-     * Normalise an affected-row count to an int.
-     */
-    private function toInt(mixed $value): int
-    {
-        if (is_int($value)) {
-            return $value;
-        }
-
-        if (is_bool($value)) {
-            return $value ? 1 : 0;
-        }
-
-        if (is_numeric($value)) {
-            return (int) $value;
-        }
-
-        return 0;
-    }
-
-    private function usesSoftDeletes(): bool
-    {
-        return in_array(SoftDeletes::class, class_uses_recursive($this->model), true);
-    }
-
-    /**
-     * The model's deleted-at column, or null when it is not
-     * soft-deletable.
-     */
-    private function deletedAtColumn(): ?string
-    {
-        if (! $this->usesSoftDeletes()) {
-            return null;
-        }
-
-        $class = $this->model::class;
-        $column = defined($class.'::DELETED_AT') ? constant($class.'::DELETED_AT') : 'deleted_at';
-
-        return is_string($column) ? $column : 'deleted_at';
-    }
-
-    /**
-     * Normalise an aggregate result to a number.
-     */
-    private function toNumber(mixed $value): int|float
-    {
-        if (is_int($value) || is_float($value)) {
-            return $value;
-        }
-
-        if (is_numeric($value)) {
-            return $value + 0;
-        }
-
-        return 0;
-    }
-
     private function newModel(): Model
     {
         $class = $this->model();
@@ -845,5 +853,100 @@ abstract class BaseRepository implements BaseRepositoryInterface
         }
 
         return $model;
+    }
+
+    /**
+     * Apply a where array (array values become whereIn) or a closure
+     * group to the query.
+     *
+     * @param  Builder<TModel>  $query
+     * @param  Closure|array<string, mixed>  $where
+     * @return Builder<TModel>
+     */
+    private function applyWhere(Builder $query, Closure|array $where): Builder
+    {
+        if ($where instanceof Closure) {
+            return $query->where($where);
+        }
+
+        foreach ($where as $column => $value) {
+            if (is_array($value)) {
+                $query->whereIn((string) $column, $value);
+
+                continue;
+            }
+
+            $query->where((string) $column, '=', $value);
+        }
+
+        return $query;
+    }
+
+    /**
+     * Never trust a caller-supplied page size: null, zero and negative
+     * values all fall back to the model's own per-page setting.
+     */
+    private function resolvePerPage(?int $perPage): int
+    {
+        return $perPage !== null && $perPage > 0
+            ? $perPage
+            : $this->model->getPerPage();
+    }
+
+    private function usesSoftDeletes(): bool
+    {
+        return array_key_exists(SoftDeletes::class, class_uses_recursive($this->model));
+    }
+
+    /**
+     * The model's deleted-at column, or null when it is not
+     * soft-deletable.
+     */
+    private function deletedAtColumn(): ?string
+    {
+        if (! $this->usesSoftDeletes()) {
+            return null;
+        }
+
+        $class = $this->model::class;
+        $column = defined($class.'::DELETED_AT') ? constant($class.'::DELETED_AT') : 'deleted_at';
+
+        return is_string($column) ? $column : 'deleted_at';
+    }
+
+    /**
+     * Normalise an affected-row count to an int.
+     */
+    private function toInt(mixed $value): int
+    {
+        if (is_int($value)) {
+            return $value;
+        }
+
+        if (is_bool($value)) {
+            return $value ? 1 : 0;
+        }
+
+        if (is_numeric($value)) {
+            return (int) $value;
+        }
+
+        return 0;
+    }
+
+    /**
+     * Normalise an aggregate result to a number.
+     */
+    private function toNumber(mixed $value): int|float
+    {
+        if (is_int($value) || is_float($value)) {
+            return $value;
+        }
+
+        if (is_numeric($value)) {
+            return $value + 0;
+        }
+
+        return 0;
     }
 }
