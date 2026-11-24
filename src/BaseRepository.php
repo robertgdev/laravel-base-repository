@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection as SupportCollection;
 use Illuminate\Support\LazyCollection;
 use RobertGDev\BaseRepository\Exceptions\ModelNotSavedException;
 
@@ -112,6 +113,25 @@ abstract class BaseRepository implements BaseRepositoryInterface
     }
 
     /**
+     * @param  array<int, int|string>  $ids
+     *
+     * @throws ModelNotFoundException
+     */
+    public function findManyOrFail(array $ids): Collection
+    {
+        $models = $this->newQuery()->findMany($ids);
+
+        /** @var array<int, int|string> $unique */
+        $unique = array_values(array_unique($ids, SORT_REGULAR));
+
+        if ($models->count() !== count($unique)) {
+            throw (new ModelNotFoundException)->setModel($this->model(), $unique);
+        }
+
+        return $models;
+    }
+
+    /**
      * @param  array<int, string>|string  $columns
      */
     public function first(array|string $columns = ['*']): ?Model
@@ -137,6 +157,21 @@ abstract class BaseRepository implements BaseRepositoryInterface
     public function firstOr(Closure $callback, array|string $columns = ['*']): mixed
     {
         return $this->newQuery()->first($columns) ?? $callback();
+    }
+
+    /**
+     * When an array of conditions is given, array values are treated as
+     * whereIn(), exactly like every other $where parameter.
+     *
+     * @param  array<string, mixed>|string  $column
+     */
+    public function firstWhere(array|string $column, mixed $operator = null, mixed $value = null): ?Model
+    {
+        if (is_array($column)) {
+            return $this->applyWhere($this->newQuery(), $column)->first();
+        }
+
+        return $this->newQuery()->firstWhere($column, $operator, $value);
     }
 
     public function firstOrCreate(array $attributes, array $values = []): Model
@@ -185,6 +220,46 @@ abstract class BaseRepository implements BaseRepositoryInterface
     public function doesntExist(Closure|array $where = []): bool
     {
         return ! $this->exists($where);
+    }
+
+    public function existsById(int|string $id): bool
+    {
+        return $this->newQuery()->whereKey($id)->exists();
+    }
+
+    /**
+     * @return SupportCollection<array-key, mixed>
+     */
+    public function pluck(string $column, ?string $key = null): SupportCollection
+    {
+        return $this->newQuery()->pluck($column, $key);
+    }
+
+    public function value(string $column): mixed
+    {
+        return $this->newQuery()->value($column);
+    }
+
+    public function sum(string $column): int|float
+    {
+        return $this->toNumber($this->newQuery()->sum($column));
+    }
+
+    public function avg(string $column): ?float
+    {
+        $value = $this->newQuery()->avg($column);
+
+        return $value === null ? null : (float) $value;
+    }
+
+    public function max(string $column): mixed
+    {
+        return $this->newQuery()->max($column);
+    }
+
+    public function min(string $column): mixed
+    {
+        return $this->newQuery()->min($column);
     }
 
     public function paginate(
@@ -411,6 +486,22 @@ abstract class BaseRepository implements BaseRepositoryInterface
     /**
      * @return TModel
      */
+    /**
+     * Normalise an aggregate result to a number.
+     */
+    private function toNumber(mixed $value): int|float
+    {
+        if (is_int($value) || is_float($value)) {
+            return $value;
+        }
+
+        if (is_numeric($value)) {
+            return $value + 0;
+        }
+
+        return 0;
+    }
+
     private function newModel(): Model
     {
         $class = $this->model();

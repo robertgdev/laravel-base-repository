@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection as SupportCollection;
 use Illuminate\Support\LazyCollection;
 use RobertGDev\BaseRepository\Exceptions\ModelNotSavedException;
 
@@ -54,6 +55,14 @@ interface BaseRepositoryInterface
     public function findMany(array $ids): Collection;
 
     /**
+     * @param  array<int, int|string>  $ids
+     * @return Collection<int, TModel>
+     *
+     * @throws ModelNotFoundException
+     */
+    public function findManyOrFail(array $ids): Collection;
+
+    /**
      * @param  array<int, string>  $columns
      * @return TModel|null
      */
@@ -85,6 +94,12 @@ interface BaseRepositoryInterface
      * @param  array<int, string>|string  $columns
      */
     public function firstOr(Closure $callback, array|string $columns = ['*']): mixed;
+
+    /**
+     * @param  array<string, mixed>|string  $column
+     * @return TModel|null
+     */
+    public function firstWhere(array|string $column, mixed $operator = null, mixed $value = null): ?Model;
 
     /**
      * @param  array<string, mixed>  $attributes
@@ -129,6 +144,23 @@ interface BaseRepositoryInterface
      * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
      */
     public function doesntExist(Closure|array $where = []): bool;
+
+    public function existsById(int|string $id): bool;
+
+    /**
+     * @return SupportCollection<array-key, mixed>
+     */
+    public function pluck(string $column, ?string $key = null): SupportCollection;
+
+    public function value(string $column): mixed;
+
+    public function sum(string $column): int|float;
+
+    public function avg(string $column): ?float;
+
+    public function max(string $column): mixed;
+
+    public function min(string $column): mixed;
 
     /**
      * @param  array<int, string>  $columns
