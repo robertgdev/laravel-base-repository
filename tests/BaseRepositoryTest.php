@@ -439,8 +439,8 @@ describe('BaseRepository', function () {
                 ->and($this->repo->count())->toBe(0);
         });
 
-        it('returns false when model not found', function () {
-            expect($this->repo->delete(999))->toBeFalse();
+        it('returns null when model not found', function () {
+            expect($this->repo->delete(999))->toBeNull();
         });
     });
 
@@ -454,8 +454,8 @@ describe('BaseRepository', function () {
                 ->and($this->repo->find($created->id))->toBeNull();
         });
 
-        it('returns false when model not found', function () {
-            expect($this->repo->forceDelete(999))->toBeFalse();
+        it('returns null when model not found', function () {
+            expect($this->repo->forceDelete(999))->toBeNull();
         });
     });
 

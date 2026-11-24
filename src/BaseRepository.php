@@ -252,27 +252,59 @@ abstract class BaseRepository implements BaseRepositoryInterface
         return $this->saveOrFail($model->fill($values), 'save');
     }
 
-    public function delete(int|string $id): bool
+    /**
+     * Delete a row by primary key.
+     *
+     * @return bool|null null when the row does not exist; false when a
+     *                   deleting listener vetoed the delete (the row is
+     *                   still there); true when it was deleted.
+     */
+    public function delete(int|string $id): ?bool
     {
         $model = $this->newQuery()->find($id);
 
-        return $model !== null && $model->delete() !== false;
+        if ($model === null) {
+            return null;
+        }
+
+        return $model->delete() !== false;
     }
 
-    public function forceDelete(int|string $id): bool
+    /**
+     * Hard-delete a row, bypassing SoftDeletes.
+     *
+     * @return bool|null null when the row does not exist; false when a
+     *                   forceDeleting listener vetoed the delete (only
+     *                   possible on soft-deletable models); true when it
+     *                   was hard-deleted.
+     */
+    public function forceDelete(int|string $id): ?bool
     {
         $model = $this->newQuery()->find($id);
 
-        return $model !== null && $model->forceDelete() !== false;
+        if ($model === null) {
+            return null;
+        }
+
+        return $model->forceDelete() !== false;
     }
 
-    public function restore(int|string $id): bool
+    /**
+     * Restore a single soft-deleted row, firing the restoring/restored
+     * model events.
+     *
+     * @return bool|null null when the row does not exist or the model is
+     *                   not soft-deletable; false when a restoring
+     *                   listener vetoed the restore; true when it was
+     *                   restored.
+     */
+    public function restore(int|string $id): ?bool
     {
         // withTrashed() is a builder macro registered by SoftDeletingScope,
         // not a model method: method_exists() can never see it, so detect
         // soft-deletability via the trait instead.
         if (! in_array(SoftDeletes::class, class_uses_recursive($this->model), true)) {
-            return false;
+            return null;
         }
 
         $model = $this->newQuery()
@@ -281,7 +313,7 @@ abstract class BaseRepository implements BaseRepositoryInterface
             ->first();
 
         if ($model === null || ! method_exists($model, 'restore')) {
-            return false;
+            return null;
         }
 
         return $model->restore() !== false;

@@ -170,11 +170,26 @@ interface BaseRepositoryInterface
      */
     public function updateOrCreate(array $attributes, array $values = []): Model;
 
-    public function delete(int|string $id): bool;
+    /**
+     * @return bool|null null when the row does not exist; false when a
+     *                   deleting listener vetoed the delete; true when
+     *                   it was deleted.
+     */
+    public function delete(int|string $id): ?bool;
 
-    public function forceDelete(int|string $id): bool;
+    /**
+     * @return bool|null null when the row does not exist; false when a
+     *                   forceDeleting listener vetoed the delete; true
+     *                   when it was hard-deleted.
+     */
+    public function forceDelete(int|string $id): ?bool;
 
-    public function restore(int|string $id): bool;
+    /**
+     * @return bool|null null when the row does not exist or the model is
+     *                   not soft-deletable; false when a restoring
+     *                   listener vetoed the restore; true when restored.
+     */
+    public function restore(int|string $id): ?bool;
 
     /**
      * @return TModel
