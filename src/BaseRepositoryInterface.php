@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\LazyCollection;
+use RobertGDev\BaseRepository\Exceptions\ModelNotSavedException;
 
 /**
  * @template TModel of Model
@@ -65,6 +66,8 @@ interface BaseRepositoryInterface
      * @param  array<string, mixed>  $attributes
      * @param  array<string, mixed>  $values
      * @return TModel
+     *
+     * @throws ModelNotSavedException
      */
     public function firstOrCreate(array $attributes, array $values = []): Model;
 
@@ -123,6 +126,8 @@ interface BaseRepositoryInterface
     /**
      * @param  array<string, mixed>  $attributes
      * @return TModel
+     *
+     * @throws ModelNotSavedException
      */
     public function create(array $attributes): Model;
 
@@ -135,6 +140,8 @@ interface BaseRepositoryInterface
     /**
      * @param  array<string, mixed>  $attributes
      * @return TModel|null
+     *
+     * @throws ModelNotSavedException
      */
     public function update(int|string $id, array $attributes): ?Model;
 
@@ -142,6 +149,8 @@ interface BaseRepositoryInterface
      * @param  array<string, mixed>  $attributes
      * @param  array<string, mixed>  $values
      * @return TModel
+     *
+     * @throws ModelNotSavedException
      */
     public function updateOrCreate(array $attributes, array $values = []): Model;
 

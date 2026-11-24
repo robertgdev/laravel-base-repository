@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\LazyCollection;
+use RobertGDev\BaseRepository\Exceptions\ModelNotSavedException;
 
 /**
  * A lightweight base repository that wraps Eloquent model operations
@@ -106,7 +107,13 @@ abstract class BaseRepository implements BaseRepositoryInterface
 
     public function firstOrCreate(array $attributes, array $values = []): Model
     {
-        return $this->newQuery()->firstOrCreate($attributes, $values);
+        $model = $this->newQuery()->firstOrCreate($attributes, $values);
+
+        if (! $model->exists) {
+            throw ModelNotSavedException::for($model, 'create');
+        }
+
+        return $model;
     }
 
     public function firstOrNew(array $attributes, array $values = []): Model
@@ -166,7 +173,7 @@ abstract class BaseRepository implements BaseRepositoryInterface
 
     public function create(array $attributes): Model
     {
-        return $this->newQuery()->create($attributes);
+        return $this->saveOrFail($this->newModelInstance($attributes), 'create');
     }
 
     public function make(array $attributes): Model
@@ -182,14 +189,18 @@ abstract class BaseRepository implements BaseRepositoryInterface
             return null;
         }
 
-        $model->update($attributes);
+        if ($model->update($attributes) === false) {
+            throw ModelNotSavedException::for($model, 'update');
+        }
 
         return $model;
     }
 
     public function updateOrCreate(array $attributes, array $values = []): Model
     {
-        return $this->newQuery()->updateOrCreate($attributes, $values);
+        $model = $this->newQuery()->firstOrNew($attributes);
+
+        return $this->saveOrFail($model->fill($values), 'save');
     }
 
     public function delete(int|string $id): bool
@@ -253,5 +264,23 @@ abstract class BaseRepository implements BaseRepositoryInterface
         $instance = $this->model->newInstance($attributes);
 
         return $instance;
+    }
+
+    /**
+     * Persist the model, turning a refused write into a hard failure
+     * instead of a silent no-op.
+     *
+     * @param  TModel  $model
+     * @return TModel
+     *
+     * @throws ModelNotSavedException
+     */
+    private function saveOrFail(Model $model, string $operation): Model
+    {
+        if ($model->save() === false) {
+            throw ModelNotSavedException::for($model, $operation);
+        }
+
+        return $model;
     }
 }
