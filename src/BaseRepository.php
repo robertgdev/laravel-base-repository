@@ -166,14 +166,40 @@ abstract class BaseRepository implements BaseRepositoryInterface
         return $this->newQuery()->paginate($perPage, $columns, $pageName, $page);
     }
 
+    /**
+     * Offset based chunking. Never mutate the columns that drive the
+     * result set (or its ordering) inside the callback: the next page is
+     * read by offset, so rows would be skipped. Use chunkById() or
+     * lazyById() when the callback writes.
+     *
+     * @param  callable  $callback
+     */
     public function chunk(int $count, callable $callback): bool
     {
         return $this->newQuery()->chunk($count, $callback);
     }
 
+    /**
+     * Keyset based chunking — safe when the callback mutates the rows.
+     *
+     * @param  callable  $callback
+     */
+    public function chunkById(int $count, callable $callback, ?string $column = null, ?string $alias = null): bool
+    {
+        return $this->newQuery()->chunkById($count, $callback, $column, $alias);
+    }
+
     public function lazy(int $chunkSize = 1000): LazyCollection
     {
         return $this->newQuery()->lazy($chunkSize);
+    }
+
+    /**
+     * @return LazyCollection<int, TModel>
+     */
+    public function lazyById(int $chunkSize = 1000, ?string $column = null, ?string $alias = null): LazyCollection
+    {
+        return $this->newQuery()->lazyById($chunkSize, $column, $alias);
     }
 
     public function create(array $attributes): Model

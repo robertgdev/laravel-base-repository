@@ -116,12 +116,28 @@ interface BaseRepositoryInterface
         ?int $page = null,
     ): LengthAwarePaginator;
 
+    /**
+     * Offset based chunking — do not mutate the driving columns in the
+     * callback, use chunkById() instead.
+     *
+     * @param  callable  $callback
+     */
     public function chunk(int $count, callable $callback): bool;
+
+    /**
+     * @param  callable  $callback
+     */
+    public function chunkById(int $count, callable $callback, ?string $column = null, ?string $alias = null): bool;
 
     /**
      * @return LazyCollection<int, TModel>
      */
     public function lazy(int $chunkSize = 1000): LazyCollection;
+
+    /**
+     * @return LazyCollection<int, TModel>
+     */
+    public function lazyById(int $chunkSize = 1000, ?string $column = null, ?string $alias = null): LazyCollection;
 
     /**
      * @param  array<string, mixed>  $attributes
