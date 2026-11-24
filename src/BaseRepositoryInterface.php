@@ -177,6 +177,16 @@ interface BaseRepositoryInterface
     public function restore(int|string $id): bool;
 
     /**
+     * @return TModel
+     */
+    public function getModel(): Model;
+
+    /**
+     * @param  TModel  $model
+     */
+    public function setModel(Model $model): static;
+
+    /**
      * @return Builder<TModel>
      */
     public function query(): Builder;

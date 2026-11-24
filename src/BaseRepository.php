@@ -47,12 +47,27 @@ use RobertGDev\BaseRepository\Exceptions\ModelNotSavedException;
 abstract class BaseRepository implements BaseRepositoryInterface
 {
     /**
-     * @param  TModel  $model
+     * @var TModel
      */
-    public function __construct(
-        protected readonly Model $model,
-    ) {}
+    protected Model $model;
 
+    /**
+     * @param  TModel|null  $model
+     */
+    public function __construct(?Model $model = null)
+    {
+        /** @var TModel $instance */
+        $instance = $model ?? $this->newModel();
+
+        $this->model = $instance;
+    }
+
+    /**
+     * The model class this repository works with — the single source of
+     * truth for the repository's model.
+     *
+     * @return class-string<TModel>
+     */
     abstract public function model(): string;
 
     public function find(int|string $id): ?Model
@@ -273,6 +288,27 @@ abstract class BaseRepository implements BaseRepositoryInterface
     }
 
     /**
+     * @return TModel
+     */
+    public function getModel(): Model
+    {
+        return $this->model;
+    }
+
+    /**
+     * Swap the model instance — e.g. to point the repository at a read
+     * replica connection or at a differently configured subclass.
+     *
+     * @param  TModel  $model
+     */
+    public function setModel(Model $model): static
+    {
+        $this->model = $model;
+
+        return $this;
+    }
+
+    /**
      * @return Builder<TModel>
      */
     public function query(): Builder
@@ -321,6 +357,19 @@ abstract class BaseRepository implements BaseRepositoryInterface
     private function newQuery(): Builder
     {
         return $this->model->newQuery();
+    }
+
+    /**
+     * @return TModel
+     */
+    private function newModel(): Model
+    {
+        $class = $this->model();
+
+        /** @var TModel $instance */
+        $instance = new $class;
+
+        return $instance;
     }
 
     /**
