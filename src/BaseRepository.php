@@ -9,6 +9,8 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\LazyCollection;
 
@@ -206,13 +208,19 @@ abstract class BaseRepository implements BaseRepositoryInterface
 
     public function restore(int|string $id): bool
     {
-        if (! method_exists($this->model, 'withTrashed')) {
+        // withTrashed() is a builder macro registered by SoftDeletingScope,
+        // not a model method: method_exists() can never see it, so detect
+        // soft-deletability via the trait instead.
+        if (! in_array(SoftDeletes::class, class_uses_recursive($this->model), true)) {
             return false;
         }
 
-        $model = $this->model->withTrashed()->find($id);
+        $model = $this->newQuery()
+            ->withoutGlobalScope(SoftDeletingScope::class)
+            ->whereKey($id)
+            ->first();
 
-        if ($model === null) {
+        if ($model === null || ! method_exists($model, 'restore')) {
             return false;
         }
 
