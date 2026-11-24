@@ -91,19 +91,19 @@ interface BaseRepositoryInterface
     public function get(array $columns = ['*']): Collection;
 
     /**
-     * @param  array<string, mixed>  $where
+     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
      */
-    public function count(array $where = []): int;
+    public function count(Closure|array $where = []): int;
 
     /**
-     * @param  array<string, mixed>  $where
+     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
      */
-    public function exists(array $where): bool;
+    public function exists(Closure|array $where): bool;
 
     /**
-     * @param  array<string, mixed>  $where
+     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
      */
-    public function doesntExist(array $where): bool;
+    public function doesntExist(Closure|array $where): bool;
 
     /**
      * @param  array<int, string>  $columns

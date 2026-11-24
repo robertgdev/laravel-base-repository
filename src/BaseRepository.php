@@ -131,23 +131,28 @@ abstract class BaseRepository implements BaseRepositoryInterface
         return $this->newQuery()->get($columns);
     }
 
-    public function count(array $where = []): int
+    /**
+     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
+     */
+    public function count(Closure|array $where = []): int
     {
-        if (empty($where)) {
-            return $this->newQuery()->count();
-        }
-
-        return $this->newQuery()->where($where)->count();
+        return $this->applyWhere($this->newQuery(), $where)->count();
     }
 
-    public function exists(array $where): bool
+    /**
+     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
+     */
+    public function exists(Closure|array $where): bool
     {
-        return $this->newQuery()->where($where)->exists();
+        return $this->applyWhere($this->newQuery(), $where)->exists();
     }
 
-    public function doesntExist(array $where): bool
+    /**
+     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
+     */
+    public function doesntExist(Closure|array $where): bool
     {
-        return $this->newQuery()->where($where)->doesntExist();
+        return ! $this->exists($where);
     }
 
     public function paginate(
@@ -244,6 +249,30 @@ abstract class BaseRepository implements BaseRepositoryInterface
     public function query(): Builder
     {
         return $this->newQuery();
+    }
+
+    /**
+     * @param  Builder<TModel>  $query
+     * @param  Closure|array<string, mixed>  $where
+     * @return Builder<TModel>
+     */
+    private function applyWhere(Builder $query, Closure|array $where): Builder
+    {
+        if ($where instanceof Closure) {
+            return $query->where($where);
+        }
+
+        foreach ($where as $column => $value) {
+            if (is_array($value)) {
+                $query->whereIn((string) $column, $value);
+
+                continue;
+            }
+
+            $query->where((string) $column, '=', $value);
+        }
+
+        return $query;
     }
 
     /**
