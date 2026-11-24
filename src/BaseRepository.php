@@ -345,6 +345,95 @@ abstract class BaseRepository implements BaseRepositoryInterface
     }
 
     /**
+     * Update matching rows in a single query. Global scopes apply; model
+     * events, observers, casts and mutators do not. Prefer update()/
+     * updateOrCreate() when those matter.
+     *
+     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
+     * @param  array<string, mixed>  $values
+     * @return int number of affected rows
+     */
+    public function updateWhere(Closure|array $where, array $values): int
+    {
+        return (int) $this->applyWhere($this->newQuery(), $where)->update($values);
+    }
+
+    /**
+     * Insert one or many rows in a single query. Bypasses model events,
+     * casts and automatic timestamps — supply them yourself.
+     *
+     * @param  array<int, array<string, mixed>>  $values
+     */
+    public function insert(array $values): bool
+    {
+        return $this->newQuery()->insert($values);
+    }
+
+    /**
+     * Insert rows, silently ignoring unique-key conflicts.
+     *
+     * @param  array<int, array<string, mixed>>  $values
+     * @return int number of inserted rows
+     */
+    public function insertOrIgnore(array $values): int
+    {
+        return (int) $this->newQuery()->insertOrIgnore($values);
+    }
+
+    /**
+     * Insert a single row and return its generated id.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    public function insertGetId(array $attributes, ?string $sequence = null): int
+    {
+        return (int) $this->newQuery()->insertGetId($attributes, $sequence);
+    }
+
+    /**
+     * Insert rows, updating the ones that already exist, in one
+     * statement. Timestamps are filled automatically, but model events,
+     * observers, casts and mutators are NOT applied — pass raw database
+     * values. $uniqueBy must be backed by a unique index (on engines
+     * whose conflict target is advisory, a missing index inserts
+     * duplicates instead of updating).
+     *
+     * @param  array<int, array<string, mixed>>  $values
+     * @param  array<int, string>  $uniqueBy
+     * @param  array<int, string>|null  $update  Columns to update on conflict; null updates every column given.
+     * @return int number of inserted/updated rows
+     */
+    public function upsert(array $values, array $uniqueBy, ?array $update = null): int
+    {
+        return (int) $this->newQuery()->upsert($values, $uniqueBy, $update);
+    }
+
+    /**
+     * Insert the row when it does not exist, otherwise update it — no
+     * model events or casts. Global scopes apply, so a soft-deleted row
+     * is not resurrected; a fresh row is inserted instead. With an array
+     * matcher the inserted row contains $attributes merged with $values;
+     * with a closure matcher $values must be complete.
+     *
+     * @param  Closure|array<string, mixed>  $attributes  Array values are treated as whereIn().
+     * @param  array<string, mixed>  $values
+     */
+    public function updateOrInsert(Closure|array $attributes, array $values = []): bool
+    {
+        $query = $this->applyWhere($this->newQuery(), $attributes);
+
+        if ((clone $query)->exists()) {
+            $query->update($values);
+
+            return true;
+        }
+
+        $row = $attributes instanceof Closure ? $values : array_merge($attributes, $values);
+
+        return (bool) $this->newQuery()->insert($row);
+    }
+
+    /**
      * Delete a row by primary key.
      *
      * @return bool|null null when the row does not exist; false when a
@@ -382,6 +471,28 @@ abstract class BaseRepository implements BaseRepositoryInterface
     }
 
     /**
+     * Delete matching rows in a single query. Model events do not fire;
+     * soft-deletable models are still soft-deleted. An empty $where
+     * deletes every row (global scopes still apply) — guard the caller.
+     *
+     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
+     * @return int number of affected rows
+     */
+    public function deleteWhere(Closure|array $where): int
+    {
+        return $this->toInt($this->applyWhere($this->newQuery(), $where)->delete());
+    }
+
+    /**
+     * @param  array<int, int|string>  $ids
+     * @return int number of affected rows
+     */
+    public function deleteMany(array $ids): int
+    {
+        return $this->toInt($this->newQuery()->whereKey($ids)->delete());
+    }
+
+    /**
      * Restore a single soft-deleted row, firing the restoring/restored
      * model events.
      *
@@ -409,6 +520,28 @@ abstract class BaseRepository implements BaseRepositoryInterface
         }
 
         return $model->restore() !== false;
+    }
+
+    /**
+     * Restore several soft-deleted rows in one bulk update. Unlike
+     * restore(), no model events fire.
+     *
+     * @param  array<int, int|string>  $ids
+     * @return int number of restored rows
+     */
+    public function restoreMany(array $ids): int
+    {
+        $column = $this->deletedAtColumn();
+
+        if ($column === null) {
+            return 0;
+        }
+
+        return (int) $this->newQuery()
+            ->withoutGlobalScope(SoftDeletingScope::class)
+            ->whereKey($ids)
+            ->whereNotNull($column)
+            ->update([$column => null]);
     }
 
     /**
@@ -486,6 +619,42 @@ abstract class BaseRepository implements BaseRepositoryInterface
     /**
      * @return TModel
      */
+    /**
+     * Normalise an affected-row count to an int.
+     */
+    private function toInt(mixed $value): int
+    {
+        if (is_int($value)) {
+            return $value;
+        }
+
+        if (is_bool($value)) {
+            return $value ? 1 : 0;
+        }
+
+        if (is_numeric($value)) {
+            return (int) $value;
+        }
+
+        return 0;
+    }
+
+    /**
+     * The model's deleted-at column, or null when it is not
+     * soft-deletable.
+     */
+    private function deletedAtColumn(): ?string
+    {
+        if (! in_array(SoftDeletes::class, class_uses_recursive($this->model), true)) {
+            return null;
+        }
+
+        $class = $this->model::class;
+        $column = defined($class.'::DELETED_AT') ? constant($class.'::DELETED_AT') : 'deleted_at';
+
+        return is_string($column) ? $column : 'deleted_at';
+    }
+
     /**
      * Normalise an aggregate result to a number.
      */

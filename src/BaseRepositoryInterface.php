@@ -228,6 +228,43 @@ interface BaseRepositoryInterface
     public function updateOrCreate(array $attributes, array $values = []): Model;
 
     /**
+     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
+     * @param  array<string, mixed>  $values
+     * @return int number of affected rows
+     */
+    public function updateWhere(Closure|array $where, array $values): int;
+
+    /**
+     * @param  array<int, array<string, mixed>>  $values
+     */
+    public function insert(array $values): bool;
+
+    /**
+     * @param  array<int, array<string, mixed>>  $values
+     * @return int number of inserted rows
+     */
+    public function insertOrIgnore(array $values): int;
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    public function insertGetId(array $attributes, ?string $sequence = null): int;
+
+    /**
+     * @param  array<int, array<string, mixed>>  $values
+     * @param  array<int, string>  $uniqueBy
+     * @param  array<int, string>|null  $update
+     * @return int number of inserted/updated rows
+     */
+    public function upsert(array $values, array $uniqueBy, ?array $update = null): int;
+
+    /**
+     * @param  Closure|array<string, mixed>  $attributes  Array values are treated as whereIn().
+     * @param  array<string, mixed>  $values
+     */
+    public function updateOrInsert(Closure|array $attributes, array $values = []): bool;
+
+    /**
      * @return bool|null null when the row does not exist; false when a
      *                   deleting listener vetoed the delete; true when
      *                   it was deleted.
@@ -242,11 +279,29 @@ interface BaseRepositoryInterface
     public function forceDelete(int|string $id): ?bool;
 
     /**
+     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
+     * @return int number of affected rows
+     */
+    public function deleteWhere(Closure|array $where): int;
+
+    /**
+     * @param  array<int, int|string>  $ids
+     * @return int number of affected rows
+     */
+    public function deleteMany(array $ids): int;
+
+    /**
      * @return bool|null null when the row does not exist or the model is
      *                   not soft-deletable; false when a restoring
      *                   listener vetoed the restore; true when restored.
      */
     public function restore(int|string $id): ?bool;
+
+    /**
+     * @param  array<int, int|string>  $ids
+     * @return int number of restored rows
+     */
+    public function restoreMany(array $ids): int;
 
     /**
      * @return TModel
