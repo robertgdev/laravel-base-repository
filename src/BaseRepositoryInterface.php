@@ -30,12 +30,22 @@ interface BaseRepositoryInterface
      */
     public function findOrFail(int|string $id): Model;
 
+    /**
+     * Invoke $callback (with no arguments, matching Eloquent) when the
+     * row does not exist.
+     *
+     * @param  Closure(): mixed  $callback
+     */
     public function findOr(int|string $id, Closure $callback): mixed;
 
     /**
      * @return TModel
      */
-    public function findOrNew(int|string $id): Model;
+    /**
+     * @param  array<int, string>|string  $columns
+     * @return TModel
+     */
+    public function findOrNew(int|string $id, array|string $columns = ['*']): Model;
 
     /**
      * @param  array<int, int|string>  $ids
@@ -47,7 +57,11 @@ interface BaseRepositoryInterface
      * @param  array<int, string>  $columns
      * @return TModel|null
      */
-    public function first(array $columns = ['*']): ?Model;
+    /**
+     * @param  array<int, string>|string  $columns
+     * @return TModel|null
+     */
+    public function first(array|string $columns = ['*']): ?Model;
 
     /**
      * @param  array<int, string>  $columns
@@ -55,12 +69,22 @@ interface BaseRepositoryInterface
      *
      * @throws ModelNotFoundException
      */
-    public function firstOrFail(array $columns = ['*']): Model;
+    /**
+     * @param  array<int, string>|string  $columns
+     * @return TModel
+     *
+     * @throws ModelNotFoundException
+     */
+    public function firstOrFail(array|string $columns = ['*']): Model;
 
     /**
      * @param  array<int, string>  $columns
      */
-    public function firstOr(array $columns, Closure $callback): mixed;
+    /**
+     * @param  Closure(): mixed  $callback
+     * @param  array<int, string>|string  $columns
+     */
+    public function firstOr(Closure $callback, array|string $columns = ['*']): mixed;
 
     /**
      * @param  array<string, mixed>  $attributes
@@ -82,8 +106,6 @@ interface BaseRepositoryInterface
      * @param  array<int, string>  $columns
      * @return Collection<int, TModel>
      */
-    public function all(array $columns = ['*']): Collection;
-
     /**
      * @param  array<int, string>  $columns
      * @return Collection<int, TModel>
@@ -93,17 +115,20 @@ interface BaseRepositoryInterface
     /**
      * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
      */
-    public function count(Closure|array $where = []): int;
+    /**
+     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
+     */
+    public function count(Closure|array $where = [], string $columns = '*'): int;
 
     /**
      * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
      */
-    public function exists(Closure|array $where): bool;
+    public function exists(Closure|array $where = []): bool;
 
     /**
      * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
      */
-    public function doesntExist(Closure|array $where): bool;
+    public function doesntExist(Closure|array $where = []): bool;
 
     /**
      * @param  array<int, string>  $columns

@@ -174,13 +174,13 @@ describe('BaseRepository', function () {
         it('returns first record when found', function () {
             $this->repo->create(['name' => 'First', 'email' => 'first@test.com']);
 
-            $result = $this->repo->firstOr(['*'], fn () => 'fallback');
+            $result = $this->repo->firstOr(fn () => 'fallback');
 
             expect($result)->toBeInstanceOf(TestModel::class);
         });
 
         it('invokes callback when empty', function () {
-            $result = $this->repo->firstOr(['*'], fn () => 'fallback');
+            $result = $this->repo->firstOr(fn () => 'fallback');
 
             expect($result)->toBe('fallback');
         });
@@ -223,22 +223,6 @@ describe('BaseRepository', function () {
 
             expect($result->exists)->toBeFalse()
                 ->and($this->repo->count())->toBe(0);
-        });
-    });
-
-    describe('all', function () {
-        it('returns all records', function () {
-            $this->repo->create(['name' => 'A', 'email' => 'a@test.com']);
-            $this->repo->create(['name' => 'B', 'email' => 'b@test.com']);
-            $this->repo->create(['name' => 'C', 'email' => 'c@test.com']);
-
-            $results = $this->repo->all();
-
-            expect($results)->toHaveCount(3);
-        });
-
-        it('returns empty collection when no records', function () {
-            expect($this->repo->all())->toHaveCount(0);
         });
     });
 

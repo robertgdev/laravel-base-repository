@@ -87,14 +87,23 @@ abstract class BaseRepository implements BaseRepositoryInterface
         return $result;
     }
 
+    /**
+     * Invoke $callback (with no arguments, matching Eloquent) when the
+     * row does not exist.
+     *
+     * @param  Closure(): mixed  $callback
+     */
     public function findOr(int|string $id, Closure $callback): mixed
     {
-        return $this->newQuery()->find($id) ?? $callback($id);
+        return $this->newQuery()->find($id) ?? $callback();
     }
 
-    public function findOrNew(int|string $id): Model
+    /**
+     * @param  array<int, string>|string  $columns
+     */
+    public function findOrNew(int|string $id, array|string $columns = ['*']): Model
     {
-        return $this->newQuery()->find($id) ?? $this->newModelInstance([]);
+        return $this->newQuery()->findOrNew($id, $columns);
     }
 
     public function findMany(array $ids): Collection
@@ -102,22 +111,32 @@ abstract class BaseRepository implements BaseRepositoryInterface
         return $this->newQuery()->findMany($ids);
     }
 
-    public function first(array $columns = ['*']): ?Model
+    /**
+     * @param  array<int, string>|string  $columns
+     */
+    public function first(array|string $columns = ['*']): ?Model
     {
         return $this->newQuery()->first($columns);
     }
 
-    public function firstOrFail(array $columns = ['*']): Model
+    /**
+     * @param  array<int, string>|string  $columns
+     */
+    public function firstOrFail(array|string $columns = ['*']): Model
     {
         return $this->newQuery()->firstOrFail($columns);
     }
 
-    public function firstOr(array $columns, Closure $callback): mixed
+    /**
+     * Return the first row, or the result of $callback when the set is
+     * empty.
+     *
+     * @param  Closure(): mixed  $callback
+     * @param  array<int, string>|string  $columns
+     */
+    public function firstOr(Closure $callback, array|string $columns = ['*']): mixed
     {
-        /** @var TModel|null $result */
-        $result = $this->newQuery()->first($columns);
-
-        return $result ?? $callback();
+        return $this->newQuery()->first($columns) ?? $callback();
     }
 
     public function firstOrCreate(array $attributes, array $values = []): Model
@@ -136,11 +155,6 @@ abstract class BaseRepository implements BaseRepositoryInterface
         return $this->newQuery()->firstOrNew($attributes, $values);
     }
 
-    public function all(array $columns = ['*']): Collection
-    {
-        return $this->newQuery()->get($columns);
-    }
-
     public function get(array $columns = ['*']): Collection
     {
         return $this->newQuery()->get($columns);
@@ -149,15 +163,18 @@ abstract class BaseRepository implements BaseRepositoryInterface
     /**
      * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
      */
-    public function count(Closure|array $where = []): int
+    /**
+     * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
+     */
+    public function count(Closure|array $where = [], string $columns = '*'): int
     {
-        return $this->applyWhere($this->newQuery(), $where)->count();
+        return $this->applyWhere($this->newQuery(), $where)->count($columns);
     }
 
     /**
      * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
      */
-    public function exists(Closure|array $where): bool
+    public function exists(Closure|array $where = []): bool
     {
         return $this->applyWhere($this->newQuery(), $where)->exists();
     }
@@ -165,7 +182,7 @@ abstract class BaseRepository implements BaseRepositoryInterface
     /**
      * @param  Closure|array<string, mixed>  $where  Array values are treated as whereIn().
      */
-    public function doesntExist(Closure|array $where): bool
+    public function doesntExist(Closure|array $where = []): bool
     {
         return ! $this->exists($where);
     }
