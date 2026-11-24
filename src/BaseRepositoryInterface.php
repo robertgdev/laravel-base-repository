@@ -363,6 +363,25 @@ interface BaseRepositoryInterface
     public function setModel(Model $model): static;
 
     /**
+     * @param  Closure(): mixed  $callback
+     */
+    public function transaction(Closure $callback): mixed;
+
+    /**
+     * @param  array<string, mixed>  $extra
+     * @return int number of affected rows
+     */
+    public function increment(int|string $id, string $column, int|float $amount = 1, array $extra = []): int;
+
+    /**
+     * @param  array<string, mixed>  $extra
+     * @return int number of affected rows
+     */
+    public function decrement(int|string $id, string $column, int|float $amount = 1, array $extra = []): int;
+
+    public function truncate(): void;
+
+    /**
      * @return Builder<TModel>
      */
     public function query(): Builder;

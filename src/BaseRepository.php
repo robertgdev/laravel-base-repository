@@ -656,6 +656,47 @@ abstract class BaseRepository implements BaseRepositoryInterface
     }
 
     /**
+     * Run the callback inside a transaction on the model's connection.
+     */
+    public function transaction(Closure $callback): mixed
+    {
+        return $this->model->getConnection()->transaction($callback);
+    }
+
+    /**
+     * Atomically increment a column. No model events or casts;
+     * updated_at is maintained.
+     *
+     * @param  array<string, mixed>  $extra
+     * @return int number of affected rows
+     */
+    public function increment(int|string $id, string $column, int|float $amount = 1, array $extra = []): int
+    {
+        return $this->newQuery()->whereKey($id)->increment($column, $amount, $extra);
+    }
+
+    /**
+     * Atomically decrement a column. No model events or casts;
+     * updated_at is maintained.
+     *
+     * @param  array<string, mixed>  $extra
+     * @return int number of affected rows
+     */
+    public function decrement(int|string $id, string $column, int|float $amount = 1, array $extra = []): int
+    {
+        return $this->newQuery()->whereKey($id)->decrement($column, $amount, $extra);
+    }
+
+    /**
+     * Empty the table. Bypasses model events and global scopes, and on
+     * some engines (MySQL) cannot be rolled back.
+     */
+    public function truncate(): void
+    {
+        $this->newQuery()->truncate();
+    }
+
+    /**
      * @return Builder<TModel>
      */
     public function query(): Builder
