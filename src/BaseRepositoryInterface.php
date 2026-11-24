@@ -9,7 +9,10 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Pagination\Cursor;
+use Illuminate\Pagination\CursorPaginator;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Collection as SupportCollection;
 use Illuminate\Support\LazyCollection;
 use RobertGDev\BaseRepository\Exceptions\ModelNotSavedException;
@@ -47,6 +50,13 @@ interface BaseRepositoryInterface
      * @return TModel
      */
     public function findOrNew(int|string $id, array|string $columns = ['*']): Model;
+
+    /**
+     * Find a row by primary key, including soft-deleted rows.
+     *
+     * @return TModel|null
+     */
+    public function findWithTrashed(int|string $id): ?Model;
 
     /**
      * @param  array<int, int|string>  $ids
@@ -174,6 +184,28 @@ interface BaseRepositoryInterface
     ): LengthAwarePaginator;
 
     /**
+     * @param  array<int, string>  $columns
+     * @return Paginator<int, TModel>
+     */
+    public function simplePaginate(
+        ?int $perPage = null,
+        array $columns = ['*'],
+        string $pageName = 'page',
+        ?int $page = null,
+    ): Paginator;
+
+    /**
+     * @param  array<int, string>  $columns
+     * @return CursorPaginator<int, TModel>
+     */
+    public function cursorPaginate(
+        ?int $perPage = null,
+        array $columns = ['*'],
+        string $cursorName = 'cursor',
+        Cursor|string|null $cursor = null,
+    ): CursorPaginator;
+
+    /**
      * Offset based chunking — do not mutate the driving columns in the
      * callback, use chunkById() instead.
      *
@@ -195,6 +227,11 @@ interface BaseRepositoryInterface
      * @return LazyCollection<int, TModel>
      */
     public function lazyById(int $chunkSize = 1000, ?string $column = null, ?string $alias = null): LazyCollection;
+
+    /**
+     * @return LazyCollection<int, TModel>
+     */
+    public function cursor(): LazyCollection;
 
     /**
      * @param  array<string, mixed>  $attributes
@@ -302,6 +339,18 @@ interface BaseRepositoryInterface
      * @return int number of restored rows
      */
     public function restoreMany(array $ids): int;
+
+    public function trashed(int|string $id): bool;
+
+    /**
+     * @return Builder<TModel>
+     */
+    public function withTrashed(): Builder;
+
+    /**
+     * @return Builder<TModel>
+     */
+    public function onlyTrashed(): Builder;
 
     /**
      * @return TModel

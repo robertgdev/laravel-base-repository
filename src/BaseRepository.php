@@ -11,7 +11,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Pagination\Cursor;
+use Illuminate\Pagination\CursorPaginator;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Collection as SupportCollection;
 use Illuminate\Support\LazyCollection;
 use RobertGDev\BaseRepository\Exceptions\ModelNotSavedException;
@@ -105,6 +108,14 @@ abstract class BaseRepository implements BaseRepositoryInterface
     public function findOrNew(int|string $id, array|string $columns = ['*']): Model
     {
         return $this->newQuery()->findOrNew($id, $columns);
+    }
+
+    /**
+     * Find a row by primary key, including soft-deleted rows.
+     */
+    public function findWithTrashed(int|string $id): ?Model
+    {
+        return $this->withTrashed()->find($id);
     }
 
     public function findMany(array $ids): Collection
@@ -277,6 +288,40 @@ abstract class BaseRepository implements BaseRepositoryInterface
     }
 
     /**
+     * @param  array<int, string>  $columns
+     */
+    public function simplePaginate(
+        ?int $perPage = null,
+        array $columns = ['*'],
+        string $pageName = 'page',
+        ?int $page = null,
+    ): Paginator {
+        return $this->newQuery()->simplePaginate(
+            $this->resolvePerPage($perPage),
+            $columns,
+            $pageName,
+            $page,
+        );
+    }
+
+    /**
+     * @param  array<int, string>  $columns
+     */
+    public function cursorPaginate(
+        ?int $perPage = null,
+        array $columns = ['*'],
+        string $cursorName = 'cursor',
+        Cursor|string|null $cursor = null,
+    ): CursorPaginator {
+        return $this->newQuery()->cursorPaginate(
+            $this->resolvePerPage($perPage),
+            $columns,
+            $cursorName,
+            $cursor,
+        );
+    }
+
+    /**
      * Offset based chunking. Never mutate the columns that drive the
      * result set (or its ordering) inside the callback: the next page is
      * read by offset, so rows would be skipped. Use chunkById() or
@@ -310,6 +355,14 @@ abstract class BaseRepository implements BaseRepositoryInterface
     public function lazyById(int $chunkSize = 1000, ?string $column = null, ?string $alias = null): LazyCollection
     {
         return $this->newQuery()->lazyById($chunkSize, $column, $alias);
+    }
+
+    /**
+     * @return LazyCollection<int, TModel>
+     */
+    public function cursor(): LazyCollection
+    {
+        return $this->newQuery()->cursor();
     }
 
     public function create(array $attributes): Model
@@ -506,14 +559,11 @@ abstract class BaseRepository implements BaseRepositoryInterface
         // withTrashed() is a builder macro registered by SoftDeletingScope,
         // not a model method: method_exists() can never see it, so detect
         // soft-deletability via the trait instead.
-        if (! in_array(SoftDeletes::class, class_uses_recursive($this->model), true)) {
+        if (! $this->usesSoftDeletes()) {
             return null;
         }
 
-        $model = $this->newQuery()
-            ->withoutGlobalScope(SoftDeletingScope::class)
-            ->whereKey($id)
-            ->first();
+        $model = $this->findWithTrashed($id);
 
         if ($model === null || ! method_exists($model, 'restore')) {
             return null;
@@ -542,6 +592,46 @@ abstract class BaseRepository implements BaseRepositoryInterface
             ->whereKey($ids)
             ->whereNotNull($column)
             ->update([$column => null]);
+    }
+
+    /**
+     * Whether the row exists and is currently soft-deleted.
+     */
+    public function trashed(int|string $id): bool
+    {
+        return $this->onlyTrashed()->whereKey($id)->exists();
+    }
+
+    /**
+     * Query including soft-deleted rows. For models that do not use
+     * SoftDeletes this is identical to query().
+     *
+     * @return Builder<TModel>
+     */
+    public function withTrashed(): Builder
+    {
+        $query = $this->newQuery();
+
+        return $this->usesSoftDeletes()
+            ? $query->withoutGlobalScope(SoftDeletingScope::class)
+            : $query;
+    }
+
+    /**
+     * Query matching soft-deleted rows only. For models that do not use
+     * SoftDeletes it matches nothing.
+     *
+     * @return Builder<TModel>
+     */
+    public function onlyTrashed(): Builder
+    {
+        $column = $this->deletedAtColumn();
+
+        if ($column === null) {
+            return $this->newQuery()->whereRaw('1 = 0');
+        }
+
+        return $this->withTrashed()->whereNotNull($column);
     }
 
     /**
@@ -639,13 +729,18 @@ abstract class BaseRepository implements BaseRepositoryInterface
         return 0;
     }
 
+    private function usesSoftDeletes(): bool
+    {
+        return in_array(SoftDeletes::class, class_uses_recursive($this->model), true);
+    }
+
     /**
      * The model's deleted-at column, or null when it is not
      * soft-deletable.
      */
     private function deletedAtColumn(): ?string
     {
-        if (! in_array(SoftDeletes::class, class_uses_recursive($this->model), true)) {
+        if (! $this->usesSoftDeletes()) {
             return null;
         }
 
